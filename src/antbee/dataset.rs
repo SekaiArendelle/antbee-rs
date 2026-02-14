@@ -1,13 +1,30 @@
+use super::kind;
 use image::ImageReader;
 use image::imageops::FilterType;
 use image::imageops::resize;
 use ndarray::Array3;
+use rand::prelude::SliceRandom;
+use rand::rng;
 use std::fs::read_dir;
 use std::path::Path;
 
+pub struct Data {
+    kind: kind::Kind,
+    data: Array3<f32>,
+}
+
+impl Data {
+    pub fn get_kind(&self) -> &kind::Kind {
+        return &self.kind;
+    }
+
+    pub fn get_data(&self) -> &Array3<f32> {
+        return &self.data;
+    }
+}
+
 pub struct Dataset {
-    ants: Vec<Array3<f32>>,
-    bees: Vec<Array3<f32>>,
+    values: Vec<Data>,
 }
 
 impl Dataset {
@@ -26,6 +43,7 @@ impl Dataset {
         return Array3::from_shape_vec((3, 28, 28), data).unwrap();
     }
 
+    #[cfg(debug_assertions)]
     fn check_is_valid_dir(path: &Path) {
         if !path.exists() {
             panic!("Dataset path does not exist");
@@ -45,25 +63,28 @@ impl Dataset {
         #[cfg(debug_assertions)]
         Self::check_is_valid_dir(&bees_dir);
 
-        let mut ants: Vec<Array3<f32>> = Vec::new();
-        let mut bees: Vec<Array3<f32>> = Vec::new();
+        let mut values = Vec::<Data>::new();
 
         for ant_img_path in read_dir(ants_dir).unwrap() {
             let origin_img = Self::jpg_to_chw(ant_img_path.unwrap().path().as_path());
-            ants.push(origin_img);
+            values.push(Data {
+                kind: kind::Kind::Ant,
+                data: origin_img,
+            });
         }
         for bee_img_path in read_dir(bees_dir).unwrap() {
             let origin_img = Self::jpg_to_chw(bee_img_path.unwrap().path().as_path());
-            bees.push(origin_img);
+            values.push(Data {
+                kind: kind::Kind::Bee,
+                data: origin_img,
+            });
         }
-        return Self { ants, bees };
+        let mut myrng = rng();
+        values[..].shuffle(&mut myrng);
+        return Self { values };
     }
 
-    pub fn get_ants(&self) -> &Vec<Array3<f32>> {
-        return &self.ants;
-    }
-
-    pub fn get_bees(&self) -> &Vec<Array3<f32>> {
-        return &self.bees;
+    pub fn get_values(&self) -> &Vec<Data> {
+        return &self.values;
     }
 }
