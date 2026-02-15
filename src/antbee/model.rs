@@ -100,7 +100,7 @@ impl Model {
     ///
     /// # Returns
     /// The cross-entropy loss value.
-    fn cross_entropy_loss(y_pred: f32, y_true: &Kind) -> f32 {
+    fn cross_entropy_loss(y_pred: f32, y_true: Kind) -> f32 {
         const EPS: f32 = 1e-7;
         return match y_true {
             Kind::Ant => -(1.0 - y_pred.clamp(EPS, 1.0 - EPS)).ln(),
@@ -171,7 +171,7 @@ impl Model {
         for data in dataset.get_values() {
             let pred = self.predict(data.get_data());
             // Compare discriminant to check if variants match
-            if std::mem::discriminant(&pred) == std::mem::discriminant(data.get_kind()) {
+            if pred == data.get_kind() {
                 correct += 1;
             }
         }

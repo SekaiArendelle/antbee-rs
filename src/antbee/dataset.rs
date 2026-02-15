@@ -14,8 +14,8 @@ pub struct Data {
 }
 
 impl Data {
-    pub fn get_kind(&self) -> &kind::Kind {
-        return &self.kind;
+    pub fn get_kind(&self) -> kind::Kind {
+        return self.kind;
     }
 
     pub fn get_data(&self) -> &Array1<f32> {
