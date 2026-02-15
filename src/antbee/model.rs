@@ -11,11 +11,10 @@ pub struct Model {
 }
 
 impl Model {
-    const LEARNING_RATE: f32 = 0.001; // 图像数据用更小学习率
+    const LEARNING_RATE: f32 = 0.001;
     const INPUT_DIM: usize = 2352; // 3 * 28 * 28
 
     pub fn new() -> Self {
-        // Xavier 初始化
         let scale = (2.0 / Self::INPUT_DIM as f32).sqrt();
         return Self {
             w: Array1::from_shape_fn(Self::INPUT_DIM, |_| (random::<f32>() - 0.5) * 2.0 * scale),
@@ -52,28 +51,24 @@ impl Model {
         };
     }
 
-    /// 单步训练，返回 loss
-    pub fn train_step(&mut self, data: &Data) -> f32 {
-        let x = data.get_data();
-
-        // 前向
-        let prob = self.predict_prob(&x);
-
-        // 计算 loss (二元交叉熵)
-        let loss = Self::cross_entropy_loss(prob, data.get_kind());
-
-        // backward
+    fn backward(&mut self, prob: f32, data: &Data) {
         // dz = prob - y; // dL/dz
         let dz = match data.get_kind() {
             Kind::Ant => prob,
             Kind::Bee => prob - 1.0,
         };
-        let dw = x * dz; // dL/dw = x * dz
+        let dw = data.get_data() * dz; // dL/dw = x * dz
         let db = dz; // dL/db = dz
 
-        // 更新
+        // update
         self.w.scaled_add(-Self::LEARNING_RATE, &dw);
         self.b -= Self::LEARNING_RATE * db;
+    }
+
+    pub fn train_step(&mut self, data: &Data) -> f32 {
+        let prob = self.predict_prob(data.get_data()); // forward
+        let loss = Self::cross_entropy_loss(prob, data.get_kind());
+        self.backward(prob, data);
 
         return loss;
     }
