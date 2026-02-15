@@ -1,99 +1,83 @@
-use super::dataset;
-use super::kind;
-use rand::random;
-use ndarray::Array;
+use super::dataset::Data;
+use super::dataset::Dataset;
+use super::kind::Kind;
 use ndarray::Array1;
-use ndarray::Array2;
-use ndarray::Axis;
+use rand::random;
 
 pub struct Model {
-    w: Array2<f32>,
-    b: Array1<f32>,
+    // z = w * x + b
+    w: Array1<f32>, // (2352,)
+    b: f32,
 }
 
 impl Model {
-    const LEARNING_RATE: f32 = 0.5;
+    const LEARNING_RATE: f32 = 0.001; // 图像数据用更小学习率
+    const INPUT_DIM: usize = 2352; // 3 * 28 * 28
 
-    pub fn new(n_features: usize, n_classes: usize) -> Self {
+    pub fn new() -> Self {
+        // Xavier 初始化
+        let scale = (2.0 / Self::INPUT_DIM as f32).sqrt();
         return Self {
-            w: Array::from_shape_fn((n_features, n_classes), |_| random()),
-            b: Array1::zeros(n_classes),
+            w: Array1::from_shape_fn(Self::INPUT_DIM, |_| (random::<f32>() - 0.5) * 2.0 * scale),
+            b: 0.0,
         };
     }
 
-    fn max_axis(input: &Array2<f32>, axis: Axis) -> Array1<f32> {
-        let (m, n) = (input.nrows(), input.ncols());
+    fn sigmoid(z: f32) -> f32 {
+        return 1.0 / (1.0 + (-z).exp());
+    }
 
-        match axis {
-            Axis(0) => {
-                // column
-                let mut result = Array1::zeros(n);
-                for col in 0..n {
-                    let mut max_val = f32::NEG_INFINITY;
-                    for row in 0..m {
-                        let val = input[[row, col]];
-                        if val > max_val {
-                            max_val = val;
-                        }
-                    }
-                    result[col] = max_val;
-                }
-                return result;
-            }
-            Axis(1) => {
-                // row
-                let mut result = Array1::zeros(m);
-                for row in 0..m {
-                    let mut max_val = f32::NEG_INFINITY;
-                    for col in 0..n {
-                        let val = input[[row, col]];
-                        if val > max_val {
-                            max_val = val;
-                        }
-                    }
-                    result[row] = max_val;
-                }
-                return result;
-            }
-            #[cfg(debug_assertions)]
-            _ => unreachable!(),
-            #[cfg(not(debug_assertions))]
-            _ => unsafe {
-                std::hint::unreachable_unchecked();
-            },
+    /// 预测为 bee 的概率
+    fn predict_prob(&self, x: &Array1<f32>) -> f32 {
+        let z = self.w.dot(x) + self.b;
+        return Self::sigmoid(z);
+    }
+
+    /// 预测类别
+    fn predict(&self, x: &Array1<f32>) -> Kind {
+        if self.predict_prob(x) > 0.5 {
+            return Kind::Bee;
+        } else {
+            return Kind::Ant;
         }
     }
 
-    fn softmax(input: &Array2<f32>, axis: Axis) -> Array2<f32> {
-        let max_vals = Self::max_axis(input, axis);
-        let shifted = input - &max_vals.insert_axis(axis);
+    /// 单步训练，返回 loss
+    pub fn train_step(&mut self, data: &Data) -> f32 {
+        let x = data.get_data();
+        let y = match data.get_kind() {
+            Kind::Ant => 0.0,
+            Kind::Bee => 1.0,
+        };
 
-        let exp_vals = shifted.mapv(|x| x.exp());
+        // 前向
+        let prob = self.predict_prob(&x);
 
-        let sum_exp = exp_vals.sum_axis(axis).insert_axis(axis);
-        return exp_vals / &sum_exp;
+        // 计算 loss (二元交叉熵)
+        const EPS: f32 = 1e-7;
+        let loss = -(y * (prob + EPS).ln() + (1.0 - y) * (1.0 - prob + EPS).ln());
+
+        // 反向传播
+        let dz = prob - y; // dL/dz
+        let dw = x * dz; // dL/dw = x * dz
+        let db = dz; // dL/db = dz
+
+        // 更新
+        self.w.scaled_add(-Self::LEARNING_RATE, &dw);
+        self.b -= Self::LEARNING_RATE * db;
+
+        return loss;
     }
 
-    fn cross_entropy_loss(real: kind::Kind, probability_of_bee: f32) -> f32 {
-        match real {
-            kind::Kind::Ant => {
-                return -((1.0 - probability_of_bee).ln());
-            }
-            kind::Kind::Bee => {
-                return -(probability_of_bee.ln());
+    /// 计算准确率
+    pub fn evaluate(&self, dataset: &Dataset) -> f32 {
+        let mut correct = 0;
+        for data in dataset.get_values() {
+            let pred = self.predict(data.get_data());
+            if std::mem::discriminant(&pred) == std::mem::discriminant(data.get_kind()) {
+                correct += 1;
             }
         }
-    }
-
-    pub fn forward(&self, x: Array2<f32>) {
-        let logits = self.w.dot(&x) + &self.b;
-        let probs = Self::softmax(&logits, Axis(1));
-    }
-
-    pub fn train(&mut self, dataset: &dataset::Dataset) {
-        for value in dataset.get_values() {
-            let kind = value.get_kind();
-            let data = value.get_data();
-        }
+        return correct as f32 / dataset.len() as f32;
     }
 }
