@@ -42,23 +42,32 @@ impl Model {
         }
     }
 
+    // TODO avoid deref Kind, a simple relocate is fine
+    fn cross_entropy_loss(y_pred: f32, y_true: &Kind) -> f32 {
+        // loss = -(y * (prob + EPS).ln() + (1.0 - y) * (1.0 - prob + EPS).ln());
+        const EPS: f32 = 1e-7;
+        return match y_true {
+            Kind::Ant => -(1.0 - y_pred.clamp(EPS, 1.0 - EPS)).ln(),
+            Kind::Bee => -y_pred.clamp(EPS, 1.0 - EPS).ln(),
+        };
+    }
+
     /// 单步训练，返回 loss
     pub fn train_step(&mut self, data: &Data) -> f32 {
         let x = data.get_data();
-        let y = match data.get_kind() {
-            Kind::Ant => 0.0,
-            Kind::Bee => 1.0,
-        };
 
         // 前向
         let prob = self.predict_prob(&x);
 
         // 计算 loss (二元交叉熵)
-        const EPS: f32 = 1e-7;
-        let loss = -(y * (prob + EPS).ln() + (1.0 - y) * (1.0 - prob + EPS).ln());
+        let loss = Self::cross_entropy_loss(prob, data.get_kind());
 
-        // 反向传播
-        let dz = prob - y; // dL/dz
+        // backward
+        // dz = prob - y; // dL/dz
+        let dz = match data.get_kind() {
+            Kind::Ant => prob,
+            Kind::Bee => prob - 1.0,
+        };
         let dw = x * dz; // dL/dw = x * dz
         let db = dz; // dL/db = dz
 
